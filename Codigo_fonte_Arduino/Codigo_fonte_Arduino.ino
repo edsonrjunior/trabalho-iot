@@ -6,7 +6,7 @@
 char ssid[] = "Kindle";      
 
 //Senha da rede wifi
-char pass[] = "";  
+char pass[] = "**090029**";  
 
 //STATUS TEMPORÁRIO ATRIBUÍDO QUANDO O WIFI É INICIALIZADO E PERMANECE ATIVO ATÉ QUE O NÚMERO DE TENTATIVAS EXPIRE (RESULTANDO EM WL_NO_SHIELD) OU QUE UMA CONEXÃO SEJA ESTABELECIDA (RESULTANDO EM WL_CONNECTED)
 int status = WL_IDLE_STATUS; 
@@ -64,11 +64,11 @@ void setup() {
 //Ligar led vermelho do wifi
   digitalWrite(wifiLedRed, HIGH);
 
-//Calibrar sensor MQ-9
-  calibrarMq9();
-
 //Conectar a rede wifi
   conectaAoWifi();
+
+//Calibrar sensor MQ-9
+  calibrarMq9();
 }
 
 void loop() {
@@ -167,6 +167,7 @@ void conectaAoWifi() {
     digitalWrite(wifiLedRed, HIGH);
   }
   server.begin();
+  delay(3000);
 }
 
 //Método para calibrar o sensor MQ-9.
