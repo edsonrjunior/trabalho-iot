@@ -1,0 +1,40 @@
+body{
+text-align: center;
+text-transform: uppercase;
+font-family: "Arial", Trebuchet MS, Helvetica, sans-serif;
+font-size: 30px;
+}
+
+a
+{
+display: block;
+   width: 250px;
+margin: 0 auto;
+margin-top: 50px;
+padding: 15px;
+font-size: 30px;
+text-decoration: none;
+text-align: center;
+border-radius: 15px;
+background-color: #29405e;
+}
+
+a:link
+{
+color: white;
+}
+
+a:visited
+{
+color: white;
+}
+
+a:hover
+{
+color: yellow;
+}
+
+a:active
+{
+color: white;
+}
