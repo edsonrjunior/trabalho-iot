@@ -3,19 +3,19 @@
 
 //VARIAVEIS DO SHIELD WIFI
 //Nome da rede wifi
-char ssid[] = "Kindle";      
+char ssid[] = "Kindle";
 
 //Senha da rede wifi
-char pass[] = "**090029**";  
+char pass[] = "****";
 
-//STATUS TEMPORÁRIO ATRIBUÍDO QUANDO O WIFI É INICIALIZADO E PERMANECE ATIVO ATÉ QUE O NÚMERO DE TENTATIVAS EXPIRE (RESULTANDO EM WL_NO_SHIELD) OU QUE UMA CONEXÃO SEJA ESTABELECIDA (RESULTANDO EM WL_CONNECTED)
-int status = WL_IDLE_STATUS; 
+//Status da conexão wifi
+int status = WL_IDLE_STATUS;
 
 //CONEXÃO REALIZADA NA PORTA 80
-WiFiEspServer server(80);    
+WiFiEspServer server(80);
 
 //BUFFER PARA AUMENTAR A VELOCIDADE E REDUZIR A ALOCAÇÃO DE MEMÓRIA
-RingBuffer buf(8);           
+RingBuffer buf(8);
 
 
 //VARIAVEIS DO SENSOR MQ-9
@@ -46,28 +46,31 @@ float Ro            = 10;
 
 LiquidCrystal lcd(12, 11, 5, 4, 3 , 2 );
 
-//DEMAIS VARIÁVEIS
-
-//Led de status da conexão wifi.
-int wifiLedRed = 9;
-int wifiLedGreen = 8;
-
-//Buzzer
-int buzzer = 10;
+//Pinos da fan, do alarme e dos leds vermelho e verde.
+const int wifiLedRed = 9;
+const int wifiLedGreen = 8;
+const int alarme = 10;
+const int rele = 6;
 
 void setup() {
   Serial.begin(9600);
 
   pinMode(wifiLedGreen, OUTPUT);
   pinMode(wifiLedRed, OUTPUT);
+  pinMode(rele, OUTPUT);
+  pinMode(alarme, OUTPUT);
 
-//Ligar led vermelho do wifi
+  //Definir alarme e fan como desligados.
+  digitalWrite(rele, LOW);
+  digitalWrite(alarme, LOW);
+
+  //Ligar led vermelho do wifi
   digitalWrite(wifiLedRed, HIGH);
 
-//Conectar a rede wifi
+  //Conectar a rede wifi
   conectaAoWifi();
 
-//Calibrar sensor MQ-9
+  //Calibrar sensor MQ-9
   calibrarMq9();
 }
 
@@ -75,57 +78,104 @@ void loop() {
 
   exibirNoDisplay();
 
-  WiFiEspClient client = server.available(); 
-  if (client) {                             
-    buf.init();                             
-    boolean currentLineIsBlank = true;
-    while (client.connected()) {             
-      if (client.available()) {             
-        char c = client.read();             
-        Serial.write(c);
-        buf.push(c);                        
-        if (c == '\n' && currentLineIsBlank) {
-    
-          client.print("<!DOCTYPE HTML>\r\n");
-          client.print("<html>\r\n");
-          client.print("<head>\r\n");
-          client.print("<meta charset=""UTF-8"">\r\n");
-          client.print("</head>\r\n");
-          client.print("<body>\r\n");
+  if (iPPM_LPG > 0) {
+    digitalWrite(rele, HIGH);
+    tone(alarme, 1000);
+    delay(1000);
+    noTone(alarme);
+    delay(1000);
+  } else {
+    digitalWrite(rele, LOW);
+  }
 
-          client.print("<br>\r\n");
 
-          client.print("Nivel de Gas    :  ");
-          client.print(iPPM_LPG);
-          client.print(" ppm");
-          client.print("<br>\r\n");
+  WiFiEspClient client = server.available();
+  if (client) {
+    buf.init();
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        buf.push(c);
 
-          client.print("Nivel de CO     : ");
-          client.print(iPPM_CO);
-          client.print(" ppm");
-          client.print("<br>\r\n");
-
-          client.print("Nível de Fumaca :");
-          client.print(iPPM_Smoke);
-          client.print(" ppm");
-          client.print("<br>\r\n");
-
-          client.print("</body>\r\n");
-          client.print("</html>\r\n");
+        //IDENTIFICA O FIM DA REQUISIÇÃO HTTP E ENVIA UMA RESPOSTA
+        if (buf.endsWith("\r\n\r\n")) {
+          sendHttpResponse(client);
           break;
         }
-        if (c == '\n') {
-          currentLineIsBlank = true;
-        }
-        else if (c != '\r') {
-          currentLineIsBlank = false;
+        if (buf.endsWith("GET /A")) {
+          sendHttpResponse(client);
+          break;
         }
       }
     }
-    delay(10);
-    // client.stop(); //FINALIZA A REQUISIÇÃO HTTP E DESCONECTA O CLIENTE
-    Serial.println("Cliente disconectado");
+    client.stop(); //FINALIZA A REQUISIÇÃO HTTP E DESCONECTA O CLIENTE
   }
+}
+
+void sendHttpResponse(WiFiEspClient client) {
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: text/html\r\n");
+  client.print("\r\n");
+  client.print("<!DOCTYPE HTML>\r\n");
+  client.print("<html>\r\n");
+
+  client.print("<head>");
+  client.print("<meta charset=\"UTF-8\">\r\n");
+  client.println("<link rel='stylesheet' type='text/css' href='https://blogmasterwalkershop.com.br/arquivos/artigos/sub_wifi/webpagecss.css' />");
+  client.print("<title>Projeto Iot - Sensor de gás, fumaça e CO2</title>\r\n");
+  client.print("</head>\r\n");
+  client.print("<body>\r\n");
+
+  client.print("<header><h1>Projeto Iot - Sensor de gás, fumaça e CO2</h1></header>\r\n");
+  client.print("<main>\r\n");
+
+  client.print("<aside>\r\n");
+  client.print("NÍVEL DE GÁS    :  ");
+  client.print(iPPM_LPG);
+  client.print(" PPM");
+  client.print("<br>\r\n");
+
+  client.print("NÍVEL DE CO2     : ");
+  client.print(iPPM_CO);
+  client.print(" PPM");
+  client.print("<br>\r\n");
+
+  client.print("NÍVEL DE FUMAÇA :");
+  client.print(iPPM_Smoke);
+  client.print(" PPM");
+  client.print("<br>\r\n");
+  client.print("</aside>\r\n");
+
+  client.print("<br>\r\n");
+  client.print("Status do FAN");
+
+  //Status da fan
+  if (rele == HIGH) {
+    client.print("<p style='line-height:2'><font color='green'>LIGADO</font></p>\r\n"); //ESCREVE "LIGADO" NA PÁGINA
+  } else {
+    client.print("<p style='line-height:2'><font color='red'>DESLIGADO</font></p>\r\n"); //ESCREVE "DESLIGADO" NA PÁGINA)
+  }
+
+  client.print("Status do Alarme");
+
+  //Status do Alarme
+  if (alarme == HIGH) {
+    client.print("<p style='line-height:2'><font color='green'>LIGADO</font></p>\r\n"); //ESCREVE "LIGADO" NA PÁGINA
+  } else {
+    client.print("<p style='line-height:2'><font color='red'>DESLIGADO</font></p>\r\n"); //ESCREVE "DESLIGADO" NA PÁGINA)
+  }
+
+  client.print("<a href=\"/A\"> Atualizar</a>");
+
+  client.print("</main>\r\n");
+
+  client.print("<footer>\r\n");
+  client.print("<p>O código do projeto você encontra em: https://github.com/edsonrjunior/trabalho-iot</p>\r\n");
+  client.print("</footer>");
+
+  client.print("</body>\r\n");
+  client.print("</html>\r\n");
+  delay(1); //INTERVALO DE 1 MILISSEGUNDO
 }
 
 void calibrarMq9() {
@@ -133,9 +183,11 @@ void calibrarMq9() {
   pinMode(calibrationLed, OUTPUT);
   digitalWrite(calibrationLed, HIGH);
   lcd.print("Calibrando...");
+  Serial.println("Calibrando sensor MQ...");
   Ro = MQCalibration(MQ_PIN);
   digitalWrite(calibrationLed, LOW);
   lcd.print("Pronto!");
+  Serial.println("Sensor MQ calibrado.");
   lcd.setCursor(0, 1);
   lcd.print("Ro= ");
   lcd.print(Ro);
@@ -144,13 +196,16 @@ void calibrarMq9() {
 }
 
 void conectaAoWifi() {
-//Inicializa a comunicação serial com shield WiFi ESP8266
+
+  Serial.println("Conectando ao WiFi...");
+
+  //Inicializa a comunicação serial com shield WiFi ESP8266
   WiFi.init(&Serial);
 
-//DEFINICAO DO IP DA PLACA WIFI                      
-  WiFi.config(IPAddress(192, 168, 0, 110)); 
+  //DEFINICAO DO IP DA PLACA WIFI
+  WiFi.config(IPAddress(192, 168, 0, 110));
 
-//Verificar se o shield está conectado ao arduino.
+  //Verificar se o shield está conectado ao arduino.
   if (WiFi.status() == WL_NO_SHIELD) {
     while (true);
   }
@@ -158,12 +213,13 @@ void conectaAoWifi() {
     status = WiFi.begin(ssid, pass);
   }
 
-//Mudar a cor do led. verde = conectado, vermelho = desconectado.
+  //Mudar a cor do led. verde = conectado, vermelho = desconectado.
   if (status == WL_CONNECTED) {
     digitalWrite(wifiLedRed, LOW);
     digitalWrite(wifiLedGreen, HIGH);
+    Serial.println("Conectado ao WiFi   .");
   } else {
-    digitalWrite(wifiLedGreen, LOW);    
+    digitalWrite(wifiLedGreen, LOW);
     digitalWrite(wifiLedRed, HIGH);
   }
   server.begin();
@@ -213,7 +269,7 @@ long MQGetGasPercentage(float rs_ro_ratio, int gas_id) {
   return 0;
 }
 
-long  MQGetPercentage(float rs_ro_ratio, float *pcurve) {
+long  MQGetPercentage(float rs_ro_ratio, float * pcurve) {
   return (pow(10, ( ((log(rs_ro_ratio) - pcurve[1]) / pcurve[2]) + pcurve[0])));
 }
 
@@ -248,22 +304,22 @@ void exibirNoDisplay() {
 }
 
 
-//Alarme do buzzer
+//Soar alarme
 void soarAlarme() {
   unsigned char i;
   while (1) {
     //Frequência 1
     for (i = 0; i < 80; i++) {
-      digitalWrite (buzzer, HIGH) ;
+      digitalWrite (alarme, HIGH) ;
       delay (1) ;
-      digitalWrite (buzzer, LOW) ;
+      digitalWrite (alarme, LOW) ;
       delay (1) ;
     }
     //Frequência 2
     for (i = 0; i < 100; i++)    {
-      digitalWrite (buzzer, HIGH) ;
+      digitalWrite (alarme, HIGH) ;
       delay (2) ;
-      digitalWrite (buzzer, LOW) ;
+      digitalWrite (alarme, LOW) ;
       delay (2) ;
     }
   }
